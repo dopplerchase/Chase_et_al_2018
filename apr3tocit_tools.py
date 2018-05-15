@@ -624,6 +624,7 @@ def apr3tocit(apr3filename,fl,sphere_size,psd_filename_2ds,psd_filename_HVPS,que
     #Calculate some PSD parameters (could add other things here, i.e. running IGF for Mu,lambda and N0)
     rho_tot2,iwc_HY = rho_e(midpoints/10.,dD/10.,ND_aver,np.zeros(ND_aver.shape),2,2,twc,return_ice=True) #HYs
     rho_tot3,iwc_BF = rho_e(midpoints/10.,dD/10.,ND_aver,np.zeros(ND_aver.shape),2,3,twc,return_ice=True) #BF
+    rho_tot4 = rho_e(midpoints/10.,dD/10.,ND_aver,np.zeros(ND_aver.shape),2,4,twc) #BF
     dmm_BF = Dmm(ND_aver*1e8,midpoints/1000.,dD/1000.,0)
     dmm_HY = Dmm(ND_aver*1e8,midpoints/1000.,dD/1000.,1)
     
@@ -1168,6 +1169,7 @@ def apr3tocit(apr3filename,fl,sphere_size,psd_filename_2ds,psd_filename_HVPS,que
     info_m['midpoints'] = 'Bin midpoints for the N(D). Units= meters'
     info_m['rho_BF'] = 'Effective density of the particles using the N(D), a and b from Brown and Francis 1995 and assuming a ellipsoidal fit of 0.6'
     info_m['rho_HY'] = 'Effective density of the particles using the N(D), a and b from Heymsfield et al. 2004 and assuming a ellipsoidal fit of 0.6'
+    info_m['rho_NV'] = 'Effective density of the particles using the N(D), mass from Nev TWC, volume of ellip sphere'
     info_m['Dmm_BF'] = 'Two types: Dmm, and Dmm_interp. Interp uses a simple interpolation, while Dmm is the Bin that exceeds 50% of the accumulated mass.Median mass dimension using N(D) and a-b from Brown and Francis 1995'
     info_m['Dmm_HY'] = 'Two types: Dmm, and Dmm_interp. Interp uses a simple interpolation, while Dmm is the Bin that exceeds 50% of the accumulated mass.Median mass dimension using N(D) and a-b from Heymsfield et al. 2004'
     
@@ -1223,6 +1225,7 @@ def apr3tocit(apr3filename,fl,sphere_size,psd_filename_2ds,psd_filename_HVPS,que
     matched['midpoints'] = midpoints / 1000. #convert to m
     matched['rho_BF'] = rho_tot3
     matched['rho_HY'] = rho_tot2
+    matched['rho_NV'] = rho_tot4
     matched['Dmm_BF'] = dmm_BF
     matched['Dmm_HY'] = dmm_HY
     matched['iwc_BF'] = iwc_BF
@@ -2350,6 +2353,7 @@ def rho_e(midpoints,binwidth,ND,MD,aspect,mass,twc,return_ice=False):
         1: habit
         2: Heymsfield et al. 2004
         3: Brown and Francis 1995
+        4: Nev
 
     ===========
     """
@@ -2403,17 +2407,19 @@ def rho_e(midpoints,binwidth,ND,MD,aspect,mass,twc,return_ice=False):
         bucket2 =0.
         for i in np.arange(3,midpoints.shape[0]):
             if flag1:
-                iwc = twc[j]/1000000.
+                iwc = twc[j]/1e6 #convert g/m^3 to g/cm^3
                 bucket = iwc
+                vol = volume(midpoints[i],NumD[i],binwidth[i]) #cm^3/cm^3
+                bucket2 = np.ma.sum([bucket2,vol])
             else:
                 if np.ma.is_masked(NumD[i]):
                     continue
                 else:
                     iwc = Mass(midpoints[i],NumD[i],MasD[i],binwidth[i]) # g/cm^3
-                    bucket = np.sum([bucket,iwc])
+                    bucket = np.ma.sum([bucket,iwc])
         
                     vol = volume(midpoints[i],NumD[i],binwidth[i]) #cm^3/cm^3
-                    bucket2 = np.sum([bucket2,vol])
+                    bucket2 = np.ma.sum([bucket2,vol])
                 
         if bucket==0. and bucket2 == 0.:
             den_b = np.nan
@@ -2424,8 +2430,8 @@ def rho_e(midpoints,binwidth,ND,MD,aspect,mass,twc,return_ice=False):
         if den_b >= 0.9167:
             den_b = 0.9167
             
-        rho_array = np.append(rho_array,den_b)
-        ice_array = np.append(ice_array,bucket)
+        rho_array = np.ma.append(rho_array,den_b)
+        ice_array = np.ma.append(ice_array,bucket)
         
     if return_ice:
         return rho_array,ice_array*100**3
@@ -2455,7 +2461,7 @@ def vol_2(D,N,dD):
     
     """
     
-    vol = (6.*np.pi/100.) * D**3 *N*dD
+    vol = 0.6 * (np.pi/6.) * D**3 *N*dD
     
     return vol
 
@@ -2469,7 +2475,7 @@ def vol_3(D,N,dD):
     
     """
     
-    vol = (49.*np.pi/600.) * D**3 *N*dD
+    vol = 0.7 * (np.pi/6) * D**3 *N*dD
     
     return vol
 
@@ -2769,4 +2775,3 @@ def precip_echo_filt3D(ku,thresh=5):
                     else:
                         c1 = c1 + 1
     return precip_yn
-  
